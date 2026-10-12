@@ -25,7 +25,7 @@ def diagnose_ranking(url, max_items=100):
                       "可能被拒绝访问":r"access denied|forbidden|unusual traffic|request blocked",
                       "可能需要登录":r"sign in to continue|log in to continue"}
             result["signals"]=[label for label,pat in patterns.items() if re.search(pat,body)]
-            if result["status"] in (403,429):
+            if "/risk/action/limit" in urlparse(result["final_url"]).path:\n                result["signals"].append("SHEIN 风控限制页（实际页面显示 403）")\n            if result["status"] in (403,429):
                 result["signals"].append(f"HTTP {result['status']}：限制访问")
             if not result["signals"] and result["status"] not in (403,429):
                 found=set()
