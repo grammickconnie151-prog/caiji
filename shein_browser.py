@@ -1,5 +1,6 @@
 """Experimental browser-rendered SHEIN listing discovery; no evasion or authentication."""
 import re
+import shutil
 from urllib.parse import urlparse, urljoin
 from playwright.sync_api import sync_playwright, TimeoutError as BrowserTimeout
 from shein_ranking import PATTERN, HOSTS
@@ -9,7 +10,8 @@ def discover_dynamic(url, max_items=100):
     if parsed.scheme!="https" or parsed.hostname not in HOSTS or parsed.path!="/ranking_list":
         raise ValueError("只支持 SHEIN UK HTTPS 榜单网址")
     with sync_playwright() as pw:
-        browser=pw.chromium.launch(headless=True, args=["--no-sandbox"])
+        system_chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+        browser=pw.chromium.launch(headless=True, executable_path=system_chromium, args=["--no-sandbox"])
         try:
             page=browser.new_page(viewport={"width":1400,"height":900},locale="en-GB")
             response=page.goto(url, wait_until="domcontentloaded",timeout=30000)
