@@ -1,31 +1,35 @@
-"""SHEIN ranking-page discovery prototype. Only accesses publicly available pages; stops on restrictions."""
+"""Conservative SHEIN UK ranking page link discovery and diagnostics."""
 from urllib.parse import urlparse, urljoin
 from html.parser import HTMLParser
 import re
 import requests
+
+PATTERN = re.compile(r"/(?:[^/?#]+-)?p-\d+\.html(?:[?#]|$)", re.I)
+HOSTS = {"www.shein.co.uk", "m.shein.co.uk"}
 
 class ProductLinks(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = set()
     def handle_starttag(self, tag, attrs):
-        if tag != "a":
-            return
-        url = dict(attrs).get("href", "")
-        if re.search(r"/[^/?]*-p-\d+\.html|/p-\d+\.html", url):
-            self.links.add(url)
+        d = dict(attrs)
+        for key in ("href", "data-href"):
+            value = d.get(key) or ""
+            if PATTERN.search(value):
+                self.links.add(value)
 
 def discover_ranking(url):
-    parsed = urlparse(url)
-    if parsed.scheme != "https" or parsed.hostname not in ("www.shein.co.uk","m.shein.co.uk"):
-        raise ValueError("仅允许 SHEIN UK 榜单 HTTPS 链接")
-    if parsed.path != "/ranking_list":
-        raise ValueError("当前只支持 ranking_list 页面")
-    response = requests.get(url, timeout=20, headers={"Accept":"text/html"})
+    parsed = urlparse(url.strip())
+    if parsed.scheme != "https" or parsed.hostname not in HOSTS or parsed.path != "/ranking_list":
+        raise ValueError("请输入 SHEIN UK 的 HTTPS ranking_list 榜单链接")
+    response = requests.get(url, timeout=20, headers={"Accept": "text/html", "User-Agent": "ProductResearch/0.1"})
     if response.status_code in (403, 429):
-        raise RuntimeError("站点限制访问，已停止。请使用获授权数据来源。")
+        raise RuntimeError(f"网站限制访问（HTTP {response.status_code}），请使用获授权的数据来源")
     response.raise_for_status()
     parser = ProductLinks()
     parser.feed(response.text)
-    return sorted({urljoin(url, path).split("?")[0] for path in parser.links
-                   if urlparse(urljoin(url,path)).hostname in ("www.shein.co.uk","m.shein.co.uk")})
+    # HTML can contain product URLs in embedded data, not only anchor tags.
+    raw = re.findall(r'(?:https?:)?//(?:www\.|m\.)?shein\.co\.uk/[^"\s<>\\]+?-p-\d+\.html|/[^"\s<>\\]+?-p-\d+\.html', response.text, re.I)
+    candidates = parser.links.union(raw)
+    links = sorted({urljoin(url, p).split("?")[0] for p in candidates if urlparse(urljoin(url,p)).hostname in HOSTS})
+    return links
