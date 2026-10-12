@@ -110,22 +110,33 @@ st.subheader("SHEIN 动态浏览器采集（实验）")
 st.caption("需要云端已安装 Chromium；如果站点拒绝访问则停止，不处理验证码。")
 dynamic_url = st.text_input("SHEIN UK 榜单网址（浏览器模式）", key="dynamic_url")
 if st.button("使用浏览器尝试提取商品链接"):
-    if not dynamic_url:
+    if not dynamic_url.strip():
         st.warning("请输入榜单网址")
     else:
         try:
-            from shein_browser import discover_dynamic
-            links, title = discover_dynamic(dynamic_url)
-            st.write("页面标题：", title)
-            if links:
-                st.success(f"发现 {len(links)} 个候选链接")
-                st.dataframe(pd.DataFrame({"url":links}))
-                st.download_button("下载链接 CSV",pd.DataFrame({"url":links}).to_csv(index=False).encode("utf-8-sig"),"shein_dynamic_links.csv")
-            else:
-                st.warning("浏览器加载后仍未发现商品链接。可能是动态接口或访问限制。")
+            from shein_browser import diagnose_ranking
+            with st.spinner("正在检查云端浏览器加载的实际页面..."):
+                result = diagnose_ranking(dynamic_url.strip())
+            st.session_state["shein_diagnostic"] = result
         except Exception as exc:
-            st.error(f"浏览器采集未成功：{exc}")
-            st.info("如出现 Executable doesn't exist，说明云端未安装 Chromium 浏览器。")
+            st.error(f"浏览器诊断失败：{exc}")
+result = st.session_state.get("shein_diagnostic")
+if result:
+    st.write("HTTP 状态码：",result.get("status"))
+    st.write("实际跳转网址：",result.get("final_url"))
+    st.write("页面标题：",result.get("title") or "空")
+    if result.get("signals"):
+        st.warning("访问状态提示："+"；".join(result["signals"])+"。程序不会绕过访问验证。")
+    st.write("候选商品链接数：",len(result.get("links",[])))
+    if result.get("links"):
+        records = pd.DataFrame({"url":result["links"]})
+        st.dataframe(records,use_container_width=True)
+        st.download_button("下载链接 CSV",records.to_csv(index=False).encode("utf-8-sig"),"shein_links.csv")
+    if result.get("screenshot"):
+        st.image(result["screenshot"],caption="云端 Chromium 实际看到的页面（可能包含页面上的个人信息，请自行检查后再分享）")
+        st.download_button("下载诊断截图",data=result["screenshot"],file_name="shein_diagnostic.png",mime="image/png")
+    if not result.get("signals") and not result.get("links"):
+        st.info("浏览器已加载页面，但未发现商品链接。可根据上方截图判断是否为空页、动态加载或页面结构变化。")
 
 st.subheader("图片归档与重命名")
 photos=st.file_uploader("上传已获授权的图片（可以多选）",type=["jpg","jpeg","png","webp"],accept_multiple_files=True)
