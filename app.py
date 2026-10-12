@@ -84,6 +84,28 @@ with pd.ExcelWriter(buf,engine="xlsxwriter") as writer:
     sheet.freeze_panes(1,0)
     sheet.set_column(0,len(COLS)-1,26)
 st.download_button("导出 Excel",buf.getvalue(),"product_sku.xlsx",mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+st.subheader("SHEIN UK 榜单链接发现（试验）")
+ranking_url = st.text_input("粘贴 SHEIN UK ranking_list 链接")
+if st.button("尝试发现商品链接"):
+    if not ranking_url.strip():
+        st.error("请先填写链接")
+    else:
+        try:
+            from shein_ranking import discover_ranking
+            links = discover_ranking(ranking_url.strip())
+            st.session_state["ranking_links"] = links
+            if links:
+                st.success(f"从静态页面发现 {len(links)} 个候选商品链接")
+            else:
+                st.warning("静态页面未发现链接。榜单可能依赖动态加载；当前没有启用浏览器自动抓取。")
+        except Exception as exc:
+            st.error(f"发现失败：{exc}")
+if st.session_state.get("ranking_links"):
+    found = pd.DataFrame({"platform":"SHEIN","url":st.session_state["ranking_links"]})
+    st.dataframe(found,use_container_width=True)
+    st.download_button("下载候选链接 CSV",found.to_csv(index=False).encode("utf-8-sig"),"shein_links.csv","text/csv")
+
 st.subheader("图片归档与重命名")
 photos=st.file_uploader("上传已获授权的图片（可以多选）",type=["jpg","jpeg","png","webp"],accept_multiple_files=True)
 if len(edited) and photos:
