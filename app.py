@@ -47,6 +47,48 @@ try:
     api_key = st.secrets.get("AMAZON_API_KEY",api_key)
 except Exception:
     pass
+st.subheader("Temu 关键词批量采集（API 测试）")
+st.caption("使用第三方 Apify 数据供应商；可能产生费用。请先确认服务商使用条款和商品数据使用权。")
+temu_key = os.getenv("APIFY_TOKEN","")
+try:
+    temu_key = st.secrets.get("APIFY_TOKEN",temu_key)
+except Exception:
+    pass
+if not temu_key:
+    st.info("未配置 APIFY_TOKEN。请在 Streamlit 应用 Secrets 中设置；不要把密钥提交到 GitHub 或聊天。")
+else:
+    with st.form("temu_query"):
+        temu_term = st.text_input("Temu 搜索关键词",placeholder="例如 hair extensions")
+        temu_count = st.number_input("最多采集商品数（测试建议 5 件）",min_value=1,max_value=50,value=5)
+        temu_run = st.form_submit_button("查询 Temu 数据（可能计费）")
+    if temu_run:
+        try:
+            from temu_provider import search_temu
+            raw_items = search_temu(temu_key,temu_term,temu_count)
+            st.session_state["temu_raw"] = raw_items
+            st.success(f"收到 {len(raw_items)} 条供应商结果，需核对字段准确性")
+        except Exception as exc:
+            st.error(f"Temu 数据接口失败：{exc}")
+if st.session_state.get("temu_raw"):
+    temu_items = st.session_state["temu_raw"]
+    display = []
+    for p in temu_items:
+        if not isinstance(p,dict): continue
+        price=p.get("price","")
+        if isinstance(price,dict): price=price.get("value",price.get("amount",""))
+        imgs=p.get("images",[])
+        image=p.get("image",p.get("imageUrl",p.get("thumbnail","")))
+        if not image and isinstance(imgs,list) and imgs:
+            image=imgs[0] if isinstance(imgs[0],str) else imgs[0].get("url","")
+        display.append({"platform":"Temu","product_id":str(p.get("productId",p.get("goodsId",p.get("id","")))),
+                        "url":str(p.get("url",p.get("productUrl",p.get("link","")))),
+                        "title":str(p.get("title",p.get("name",""))),
+                        "price":str(price),"currency":str(p.get("currency","")),
+                        "main_image_url":str(image)})
+    st.dataframe(pd.DataFrame(display),use_container_width=True)
+    st.download_button("下载 Temu CSV（可导入上方表格）",pd.DataFrame(display).to_csv(index=False).encode("utf-8-sig"),"temu_products.csv")
+    st.caption("SKU/SKC、颜色规格及详情图尚未验证，不会编造缺失字段。")
+
 st.subheader("Amazon 商品查询")
 if not api_url:
     st.info("Amazon API 尚未部署或配置，因此此处不能实时抓取；可先试用文件导入。")
