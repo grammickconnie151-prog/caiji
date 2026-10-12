@@ -106,6 +106,27 @@ if st.session_state.get("ranking_links"):
     st.dataframe(found,use_container_width=True)
     st.download_button("下载候选链接 CSV",found.to_csv(index=False).encode("utf-8-sig"),"shein_links.csv","text/csv")
 
+st.subheader("SHEIN 动态浏览器采集（实验）")
+st.caption("需要云端已安装 Chromium；如果站点拒绝访问则停止，不处理验证码。")
+dynamic_url = st.text_input("SHEIN UK 榜单网址（浏览器模式）", key="dynamic_url")
+if st.button("使用浏览器尝试提取商品链接"):
+    if not dynamic_url:
+        st.warning("请输入榜单网址")
+    else:
+        try:
+            from shein_browser import discover_dynamic
+            links, title = discover_dynamic(dynamic_url)
+            st.write("页面标题：", title)
+            if links:
+                st.success(f"发现 {len(links)} 个候选链接")
+                st.dataframe(pd.DataFrame({"url":links}))
+                st.download_button("下载链接 CSV",pd.DataFrame({"url":links}).to_csv(index=False).encode("utf-8-sig"),"shein_dynamic_links.csv")
+            else:
+                st.warning("浏览器加载后仍未发现商品链接。可能是动态接口或访问限制。")
+        except Exception as exc:
+            st.error(f"浏览器采集未成功：{exc}")
+            st.info("如出现 Executable doesn't exist，说明云端未安装 Chromium 浏览器。")
+
 st.subheader("图片归档与重命名")
 photos=st.file_uploader("上传已获授权的图片（可以多选）",type=["jpg","jpeg","png","webp"],accept_multiple_files=True)
 if len(edited) and photos:
